@@ -1,0 +1,11 @@
+[
+  {"name": "Stripe",     "ats": "greenhouse", "slug": "stripe"},
+  {"name": "Databricks", "ats": "greenhouse", "slug": "databricks"},
+  {"name": "Airbnb",     "ats": "greenhouse", "slug": "airbnb"},
+  {"name": "Cloudflare", "ats": "greenhouse", "slug": "cloudflare"},
+  {"name": "Figma",      "ats": "greenhouse", "slug": "figma"},
+  {"name": "Palantir",   "ats": "lever",      "slug": "palantir"},
+  {"name": "OpenAI",     "ats": "ashby",      "slug": "openai"},
+  {"name": "Ramp",       "ats": "ashby",      "slug": "ramp"},
+  {"name": "Notion",     "ats": "ashby",      "slug": "notion"}
+]

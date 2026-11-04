@@ -1,0 +1,12 @@
+{
+  "title_include": ["software engineer", "data engineer", "data scientist", "data analyst", "machine learning", "backend", "full stack", "new grad", "university graduate", "analytics"],
+  "title_exclude": ["senior", "staff", "principal", "director", "manager", "head of", "vp ", "intern"],
+  "location_include": ["united states", "usa", "us-", "remote", "new york", "san francisco", "seattle", "austin", "boston", "chicago"],
+  "description_exclude": [
+    "no sponsorship", "not provide sponsorship", "unable to sponsor", "will not sponsor",
+    "without sponsorship", "without the need for sponsorship", "without visa sponsorship",
+    "not offer sponsorship", "cannot sponsor", "u.s. citizen", "us citizen", "security clearance",
+    "must be authorized to work in the u"
+  ],
+  "max_age_days": 14
+}

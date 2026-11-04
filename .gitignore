@@ -1,1 +1,4 @@
 .playwright-mcp/
+job_search/seen.json
+job_search/new_jobs.csv
+__pycache__/
