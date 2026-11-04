@@ -1,11 +1,82 @@
 [
-  {"name": "Stripe",     "ats": "greenhouse", "slug": "stripe"},
-  {"name": "Databricks", "ats": "greenhouse", "slug": "databricks"},
-  {"name": "Airbnb",     "ats": "greenhouse", "slug": "airbnb"},
-  {"name": "Cloudflare", "ats": "greenhouse", "slug": "cloudflare"},
-  {"name": "Figma",      "ats": "greenhouse", "slug": "figma"},
-  {"name": "Palantir",   "ats": "lever",      "slug": "palantir"},
-  {"name": "OpenAI",     "ats": "ashby",      "slug": "openai"},
-  {"name": "Ramp",       "ats": "ashby",      "slug": "ramp"},
-  {"name": "Notion",     "ats": "ashby",      "slug": "notion"}
+  {
+    "name": "Databricks",
+    "ats": "greenhouse",
+    "slug": "databricks"
+  },
+  {
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "slug": "stripe"
+  },
+  {
+    "name": "Airbnb",
+    "ats": "greenhouse",
+    "slug": "airbnb"
+  },
+  {
+    "name": "Cloudflare",
+    "ats": "greenhouse",
+    "slug": "cloudflare"
+  },
+  {
+    "name": "Datadog",
+    "ats": "greenhouse",
+    "slug": "datadog"
+  },
+  {
+    "name": "Fivetran",
+    "ats": "greenhouse",
+    "slug": "fivetran"
+  },
+  {
+    "name": "Flatiron Health",
+    "ats": "greenhouse",
+    "slug": "flatironhealth"
+  },
+  {
+    "name": "Oscar Health",
+    "ats": "greenhouse",
+    "slug": "oscar"
+  },
+  {
+    "name": "Zocdoc",
+    "ats": "greenhouse",
+    "slug": "zocdoc"
+  },
+  {
+    "name": "Samsara",
+    "ats": "greenhouse",
+    "slug": "samsara"
+  },
+  {
+    "name": "Brex",
+    "ats": "greenhouse",
+    "slug": "brex"
+  },
+  {
+    "name": "Coinbase",
+    "ats": "greenhouse",
+    "slug": "coinbase"
+  },
+  {
+    "name": "Palantir",
+    "ats": "lever",
+    "slug": "palantir"
+  },
+  {
+    "name": "Ramp",
+    "ats": "ashby",
+    "slug": "ramp"
+  },
+  {
+    "name": "Notion",
+    "ats": "ashby",
+    "slug": "notion"
+  },
+  {
+    "name": "OpenAI",
+    "ats": "ashby",
+    "slug": "openai"
+  }
 ]
