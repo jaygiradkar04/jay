@@ -76,5 +76,63 @@ class QueueTests(unittest.TestCase):
             self.assertEqual(Queue(qp).jobs[rec["key"]]["stage"], "skipped")
 
 
+FIX = os.path.join(os.path.dirname(__file__), "fixtures", "pipeline.sample.md")
+
+
+class CareerOpsAdapter(unittest.TestCase):
+    def setUp(self):
+        from adapters.career_ops import parse_pipeline
+        with open(FIX) as fh:
+            self.text = fh.read()
+        self.rows = {r["url"].rstrip("/").split("/")[-1].split("?")[0]: r for r in parse_pipeline(self.text)}
+
+    def test_pending_with_location_and_posted(self):
+        r = self.rows["4723591006"]
+        self.assertEqual((r["employer"], r["title"], r["posted"]), ("Zip Co", "Product Analyst", "2026-10-27"))
+        self.assertEqual(r["extra"]["location"], "Remote - US")
+        self.assertEqual(r["stage"], "found")
+
+    def test_title_with_comma_and_yrs(self):
+        r = self.rows["8115834"]
+        self.assertEqual(r["title"], "Insights Lead, Instacart Business")
+        self.assertEqual(r["extra"]["yrs"], "5+")
+
+    def test_trust_segment_not_taken_as_location(self):
+        r = self.rows["0f1e2d3c-4b5a-6978-8897-a6b5c4d3e2f1"]
+        self.assertNotIn("location", r["extra"])
+        self.assertTrue(r["extra"]["trust"].startswith("60"))
+
+    def test_bare_url_row_and_comp_and_rank(self):
+        self.assertEqual(self.rows["550665"]["employer"], "")
+        a = self.rows["C1A38B9608"]
+        self.assertEqual(a["score"], 3.0)
+        self.assertEqual(a["extra"]["comp"], "$90,000-$110,000")
+        self.assertEqual(a["extra"]["location"], "Remote")
+
+    def test_processed_expired_prescreen_and_unfetched(self):
+        self.assertEqual(self.rows["7516411003"]["stage"], "verified")
+        self.assertEqual(self.rows["7516411003"]["score"], 3.4)
+        self.assertEqual(self.rows["999"]["stage"], "skipped")
+        self.assertEqual(self.rows["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]["stage"], "skipped")
+        self.assertNotIn("broken-link", self.rows)
+
+    def test_ingest_dedupes_against_jobright_and_never_downgrades(self):
+        from adapters.career_ops import ingest
+        with tempfile.TemporaryDirectory() as d:
+            q = Queue(os.path.join(d, "jobs.jsonl"))
+            q.add(url="https://job-boards.greenhouse.io/zipcolimited/jobs/4723591006",
+                  employer="Zip", title="Product Analyst", source="jobright", source_score=72)
+            applied, _ = q.add(url="https://boards.greenhouse.io/oldco/jobs/999",
+                               employer="OldCo", title="Analyst", source="jobright")
+            q.advance(applied["key"], "applied")
+            counts = ingest(q, self.text)
+            zip_rec = q.jobs[canonical_key("https://boards.greenhouse.io/zipcolimited/jobs/4723591006")]
+            self.assertEqual(sorted(zip_rec["sources"]), ["career-ops", "jobright"])
+            self.assertEqual(q.jobs[applied["key"]]["stage"], "applied")  # expiry must not downgrade
+            self.assertEqual(counts["ignored"], 1)  # the [!] row
+            again = ingest(q, self.text)
+            self.assertEqual(again["added"], 0)  # idempotent
+
+
 if __name__ == "__main__":
     unittest.main()

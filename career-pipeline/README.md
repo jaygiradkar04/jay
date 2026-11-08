@@ -24,12 +24,13 @@ and scores are unreliable, so it only *nominates*; the employer page decides.
 
 ## Commands (Python 3, standard library only)
 ```bash
-python3 -m pipeline.cli import jobs.json          # bulk add from either source
+python3 -m pipeline.cli ingest-career-ops ~/career-ops/data/pipeline.md   # career-ops inbox
+python3 -m pipeline.cli import jobs.json          # bulk add (e.g. JobRight scrape)
 python3 -m pipeline.cli add --url URL --employer E --title T --source manual
 python3 -m pipeline.cli gate <key> --jd-file jd.txt
 python3 -m pipeline.cli list --stage gated
 python3 -m pipeline.cli package                   # hand-off text for ResumePerfector
-python3 -I -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
 Stages: `found -> verified -> gated -> tailored -> applied | skipped`.
 
@@ -47,12 +48,17 @@ Stages: `found -> verified -> gated -> tailored -> applied | skipped`.
 ```bash
 npx @santifer/career-ops init
 ```
-Then export its scan results as a JSON list of
-`{url, employer, title, source: "career-ops", score}` and `import` them.
+Then run `ingest-career-ops` on its `data/pipeline.md`. The adapter is
+read-only on career-ops files, idempotent, and maps: pending -> `found`,
+evaluated (`n/5`) -> `verified`, expired/pre-screen-skipped -> `skipped`.
+It never downgrades a job you already tailored or applied to. A bare-URL row
+(no company/title yet) is kept; its employer fills in once career-ops
+evaluates it. `tests/fixtures/pipeline.sample.md` was generated with
+career-ops' own `formatPipelineOffer`.
 Keep `portals.yml` pointed at employers known to sponsor.
 Never commit `data/` or your resume; both are gitignored/personal.
 
 ## Not built yet
 - Auto-fetching H-1B employer history (USCIS Employer Data Hub CSV lookup).
-- A career-ops export adapter (needs the real output format from your install).
+- Reading career-ops evaluation reports (`reports/`) and the tracker for richer scores.
 - Scheduling the scan.

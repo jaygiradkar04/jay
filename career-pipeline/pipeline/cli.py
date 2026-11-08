@@ -34,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     i = sub.add_parser("import")
     i.add_argument("file", help="JSON list of {url, employer, title, source, posted?, score?}")
 
+    c = sub.add_parser("ingest-career-ops", help="merge career-ops data/pipeline.md")
+    c.add_argument("file")
+
     g = sub.add_parser("gate")
     g.add_argument("key")
     g.add_argument("--jd-file", help="job description text; default stdin")
@@ -63,6 +66,12 @@ def main(argv: list[str] | None = None) -> int:
             merged += not new
         q.save()
         print(f"added {added}, merged {merged} duplicates")
+    elif args.cmd == "ingest-career-ops":
+        from adapters.career_ops import ingest
+        with open(args.file) as fh:
+            counts = ingest(q, fh.read())
+        q.save()
+        print(json.dumps(counts))
     elif args.cmd == "gate":
         if args.jd_file:
             with open(args.jd_file) as fh:
