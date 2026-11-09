@@ -191,6 +191,40 @@ class Discover(unittest.TestCase):
         self.assertEqual((res[0]["ats"], res[0]["slug"], res[0]["matches"]), ("greenhouse", "goodco", ["Data Analyst"]))
 
 
+class Priority(unittest.TestCase):
+    def test_tiers_and_rules(self):
+        from pipeline.priority import history_tier, priority
+        self.assertEqual(history_tier(1819, 475), "STRONG")
+        self.assertEqual(history_tier(150, 0), "MODERATE")
+        self.assertEqual(history_tier(None, None), "NONE")
+        self.assertEqual(priority("UNKNOWN", "STRONG"), "HIGH")
+        self.assertEqual(priority("UNKNOWN", "NONE"), "LOW")
+        self.assertEqual(priority("OK_SPONSORS", "STRONG"), "TOP")
+        self.assertEqual(priority("LONG_TERM_RISK", "STRONG"), "LOW")   # explicit refusal beats history
+        self.assertEqual(priority("BLOCK", "STRONG"), "SKIP")
+        self.assertEqual(priority("UNKNOWN", "STRONG", ["STAFFING_RISK"]), "MEDIUM")
+
+    def test_scan_records_history_and_priority(self):
+        from datetime import datetime, timezone
+        import scanners.ats_scan as mod
+        real = mod.scan
+        gh = {"jobs": [{"title": "Data Analyst", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/9",
+                        "location": {"name": "R"}, "first_published": "2026-11-05", "content": "Silent."}]}
+        mod.scan = lambda cfg: real(cfg, lambda u: gh, today=datetime(2026, 11, 9, tzinfo=timezone.utc))
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                cfgp = os.path.join(d, "c.json")
+                with open(cfgp, "w") as fh:
+                    json.dump({"title_positive": ["Analyst"], "companies": [
+                        {"name": "Acme", "ats": "greenhouse", "slug": "acme", "filed": 1800, "perm": 400}]}, fh)
+                qp = os.path.join(d, "jobs.jsonl")
+                main(["--queue", qp, "scan", "--config", cfgp])
+                rec = next(iter(Queue(qp).jobs.values()))
+                self.assertEqual((rec["h1b_history"], rec["priority"]), ("STRONG", "HIGH"))
+        finally:
+            mod.scan = real
+
+
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "pipeline.sample.md")
 
 

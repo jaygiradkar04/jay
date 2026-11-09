@@ -95,6 +95,7 @@ def scan(config: dict, fetcher=fetch_json, today: datetime | None = None) -> tup
         try:
             payload = fetcher(API[c["ats"]].format(slug=c["slug"]))
             for j in normalize(c["ats"], c["name"], payload):
+                j["h1b_filed"], j["h1b_perm"] = c.get("filed"), c.get("perm")
                 if not title_ok(j["title"], pos, neg):
                     continue
                 if j["posted"] and j["posted"] < cutoff:

@@ -13,6 +13,7 @@ import json
 import sys
 
 from .queue import STAGES, Queue
+from .priority import ORDER, history_tier, priority
 from .sponsorship import BLOCK, classify
 
 DEFAULT_QUEUE = "data/jobs.jsonl"
@@ -90,9 +91,13 @@ def main(argv: list[str] | None = None) -> int:
             (jd_dir / f"{safe}.txt").write_text(j["jd"])
             res = classify(j["jd"], j["employer"])
             blocked = res["verdict"] == BLOCK
+            tier = history_tier(j.get("h1b_filed"), j.get("h1b_perm"))
+            prio = priority(res["verdict"], tier, res["flags"])
             # Came straight from the employer's own board API, so it is live: verified.
             q.advance(rec["key"], "skipped" if blocked else "gated", sponsorship=res["verdict"],
-                      flags=res["flags"], gate_reasons=res["reasons"], jd_file=str(jd_dir / f"{safe}.txt"))
+                      flags=res["flags"], gate_reasons=res["reasons"], jd_file=str(jd_dir / f"{safe}.txt"),
+                      h1b_filed=j.get("h1b_filed"), h1b_perm=j.get("h1b_perm"),
+                      h1b_history=tier, priority=prio)
             stats["blocked" if blocked else "gated"] += 1
         q.save()
         print(json.dumps(stats))
@@ -117,15 +122,18 @@ def main(argv: list[str] | None = None) -> int:
         q.save()
         print(json.dumps(res, indent=2))
     elif args.cmd == "list":
-        for j in sorted(q.jobs.values(), key=lambda j: j["stage"]):
+        rank = lambda j: (ORDER.index(j["priority"]) if j.get("priority") in ORDER else len(ORDER), j["stage"])
+        for j in sorted(q.jobs.values(), key=rank):
             if args.stage and j["stage"] != args.stage:
                 continue
-            print(f'{j["stage"]:9} {j.get("sponsorship", "-"):15} {j["employer"]} | {j["title"]} | {j["key"]}')
+            print(f'{j.get("priority", "-"):7} {j["stage"]:9} {j.get("sponsorship", "-"):15} {j["employer"]} | {j["title"]} | {j["key"]}')
     elif args.cmd == "package":
         for j in q.by_stage("gated"):
             print(f'## {j["employer"]} - {j["title"]}\n- Apply page: {j["url"]}\n'
                   f'- Posted (employer date): {j.get("posted") or "unknown"}\n'
                   f'- Sources: {", ".join(j["sources"])}  scores: {j.get("scores", {})}\n'
+                  f'- Priority: {j.get("priority", "-")}  H-1B history: {j.get("h1b_history", "-")} '
+                  f'(LCAs {j.get("h1b_filed")}, PERM {j.get("h1b_perm")})\n'
                   f'- Sponsorship: {j.get("sponsorship")}  flags: {j.get("flags")}\n'
                   f'- Gate notes: {" ".join(j.get("gate_reasons", []))}\n'
                   f'- Reminder: do not claim skills the resume does not support; '
