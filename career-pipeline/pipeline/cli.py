@@ -34,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     i = sub.add_parser("import")
     i.add_argument("file", help="JSON list of {url, employer, title, source, posted?, score?}")
 
+    sc = sub.add_parser("scan", help="scan public ATS boards, gate each JD")
+    sc.add_argument("--config", default="config/companies.json")
+
     c = sub.add_parser("ingest-career-ops", help="merge career-ops data/pipeline.md")
     c.add_argument("file")
 
@@ -66,6 +69,35 @@ def main(argv: list[str] | None = None) -> int:
             merged += not new
         q.save()
         print(f"added {added}, merged {merged} duplicates")
+    elif args.cmd == "scan":
+        import re
+        from pathlib import Path
+        from scanners.ats_scan import scan
+        with open(args.config) as fh:
+            cfg = json.load(fh)
+        jobs, errors = scan(cfg)
+        jd_dir = Path(args.queue).parent / "jds"
+        jd_dir.mkdir(parents=True, exist_ok=True)
+        stats = {"new": 0, "seen": 0, "gated": 0, "blocked": 0, "errors": len(errors)}
+        for j in jobs:
+            rec, new = q.add(url=j["url"], employer=j["employer"], title=j["title"],
+                             source="ats-scan", posted=j["posted"], location=j["location"])
+            if not new:
+                stats["seen"] += 1
+                continue
+            stats["new"] += 1
+            safe = re.sub(r"[^A-Za-z0-9._-]+", "_", rec["key"])
+            (jd_dir / f"{safe}.txt").write_text(j["jd"])
+            res = classify(j["jd"], j["employer"])
+            blocked = res["verdict"] == BLOCK
+            # Came straight from the employer's own board API, so it is live: verified.
+            q.advance(rec["key"], "skipped" if blocked else "gated", sponsorship=res["verdict"],
+                      flags=res["flags"], gate_reasons=res["reasons"], jd_file=str(jd_dir / f"{safe}.txt"))
+            stats["blocked" if blocked else "gated"] += 1
+        q.save()
+        print(json.dumps(stats))
+        for e in errors:
+            print("ERROR", e, file=sys.stderr)
     elif args.cmd == "ingest-career-ops":
         from adapters.career_ops import ingest
         with open(args.file) as fh:

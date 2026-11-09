@@ -24,6 +24,7 @@ and scores are unreliable, so it only *nominates*; the employer page decides.
 
 ## Commands (Python 3, standard library only)
 ```bash
+python3 -m pipeline.cli scan                      # cloud-safe: public ATS APIs -> gate -> queue
 python3 -m pipeline.cli ingest-career-ops ~/career-ops/data/pipeline.md   # career-ops inbox
 python3 -m pipeline.cli import jobs.json          # bulk add (e.g. JobRight scrape)
 python3 -m pipeline.cli add --url URL --employer E --title T --source manual
@@ -33,6 +34,17 @@ python3 -m pipeline.cli package                   # hand-off text for ResumePerf
 python3 -m unittest discover -s tests
 ```
 Stages: `found -> verified -> gated -> tailored -> applied | skipped`.
+
+## Cloud scanning
+`scan` reads `config/companies.json` (copy `config/companies.example.json`):
+Greenhouse, Lever and Ashby boards, title filter, max age. It uses urllib, so
+it honors the sandbox proxy and talks only to fixed public API hosts. career-ops'
+own `scan.mjs` bypasses a proxy-only sandbox unless you set
+`CAREER_OPS_TRUST_PROXY_EGRESS=1` (only safe if the proxy blocks private
+addresses), so the cloud path uses this scanner instead. Postings from an
+employer board are live by construction; each description is saved under
+`data/jds/` and gated immediately (BLOCK -> `skipped`, otherwise `gated`).
+Workable and other ATSs are not covered yet.
 
 ## STEM OPT notes (not legal advice; confirm with your DSO)
 - The employer must be enrolled in E-Verify and complete an I-983 training

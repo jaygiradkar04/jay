@@ -1,0 +1,10 @@
+{
+  "max_age_days": 14,
+  "title_positive": ["Data Analyst", "Business Analyst", "Analytics Engineer", "Business Intelligence", "Product Analyst"],
+  "title_negative": ["Intern", "Director", "VP", "Principal", "Staff"],
+  "companies": [
+    {"name": "Instacart", "ats": "greenhouse", "slug": "instacart"},
+    {"name": "Ramp", "ats": "ashby", "slug": "ramp"},
+    {"name": "Palantir", "ats": "lever", "slug": "palantir"}
+  ]
+}

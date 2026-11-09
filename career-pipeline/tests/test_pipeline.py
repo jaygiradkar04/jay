@@ -76,6 +76,90 @@ class QueueTests(unittest.TestCase):
             self.assertEqual(Queue(qp).jobs[rec["key"]]["stage"], "skipped")
 
 
+class AtsScanner(unittest.TestCase):
+    GH = {"jobs": [
+        {"title": "Senior Data Analyst", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1",
+         "location": {"name": "Remote - US"}, "first_published": "2026-11-05T10:00:00-05:00",
+         "content": "&lt;p&gt;Analyze data. We offer H1B transfers and use E-Verify.&lt;/p&gt;"},
+        {"title": "Data Analyst Intern", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/2",
+         "location": {"name": "NYC"}, "first_published": "2026-11-05", "content": ""},
+        {"title": "Business Analyst", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/3",
+         "location": {"name": "Remote"}, "first_published": "2026-01-01", "content": "old"},
+        {"title": "Product Analyst", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/4",
+         "location": {"name": "Remote"}, "first_published": "2026-11-06",
+         "content": "&lt;p&gt;US citizens only. Security clearance required.&lt;/p&gt;"}]}
+    LEVER = [{"text": "Analytics Engineer", "hostedUrl": "https://jobs.lever.co/acme/0f1e2d3c-4b5a-6978-8897-a6b5c4d3e2f1",
+              "categories": {"location": "Remote"}, "createdAt": 1793836800000,
+              "descriptionPlain": "We will not sponsor visas.", "additionalPlain": "", "lists": []}]
+    ASHBY = {"jobs": [{"title": "Business Intelligence Analyst", "jobUrl": "https://jobs.ashbyhq.com/acme/11111111-2222-3333-4444-555555555555",
+                       "location": "Remote", "publishedAt": "2026-11-07T00:00:00Z", "isListed": True,
+                       "descriptionPlain": "Silent about visas."},
+                      {"title": "Data Analyst", "jobUrl": "https://jobs.ashbyhq.com/acme/unlisted", "isListed": False}]}
+
+    def fake(self, url):
+        if "greenhouse" in url:
+            return self.GH
+        if "lever" in url:
+            return self.LEVER
+        if "ashby" in url:
+            return self.ASHBY
+        raise OSError("boom")
+
+    def cfg(self):
+        return {"max_age_days": 14, "title_positive": ["Analyst", "Analytics Engineer"],
+                "title_negative": ["Intern"], "companies": [
+                    {"name": "Acme GH", "ats": "greenhouse", "slug": "acme"},
+                    {"name": "Acme Lever", "ats": "lever", "slug": "acme"},
+                    {"name": "Acme Ashby", "ats": "ashby", "slug": "acme"},
+                    {"name": "Down", "ats": "ashby", "slug": "down2"}]}
+
+    def test_scan_filters_titles_age_unlisted_and_isolates_errors(self):
+        from datetime import datetime, timezone
+        from scanners.ats_scan import scan
+        # fetcher fails only for the 'down2' slug
+        f = lambda u: (_ for _ in ()).throw(OSError("boom")) if "down2" in u else self.fake(u)
+        jobs, errors = scan(self.cfg(), f, today=datetime(2026, 11, 9, tzinfo=timezone.utc))
+        titles = sorted(j["title"] for j in jobs)
+        self.assertEqual(titles, ["Analytics Engineer", "Business Intelligence Analyst",
+                                  "Product Analyst", "Senior Data Analyst"])
+        self.assertEqual(len(errors), 1)
+        gh = next(j for j in jobs if j["title"] == "Senior Data Analyst")
+        self.assertIn("H1B", gh["jd"])
+        self.assertNotIn("<p>", gh["jd"])
+        self.assertEqual(gh["posted"], "2026-11-05")
+
+    def test_scan_cli_gates_and_skips(self):
+        import io, contextlib
+        from datetime import datetime, timezone
+        import scanners.ats_scan as mod
+        real = mod.scan
+        mod.scan = lambda cfg: real(cfg, self.fake, today=datetime(2026, 11, 9, tzinfo=timezone.utc))
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                cfgp = os.path.join(d, "c.json")
+                cfg = self.cfg(); cfg["companies"] = cfg["companies"][:3]
+                with open(cfgp, "w") as fh:
+                    json.dump(cfg, fh)
+                qp = os.path.join(d, "data", "jobs.jsonl")
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    main(["--queue", qp, "scan", "--config", cfgp])
+                stats = json.loads(buf.getvalue().strip().splitlines()[-1])
+                self.assertEqual((stats["new"], stats["blocked"], stats["gated"]), (4, 1, 3))
+                q = Queue(qp)
+                by = {j["title"]: j for j in q.jobs.values()}
+                self.assertEqual(by["Product Analyst"]["stage"], "skipped")
+                self.assertEqual(by["Senior Data Analyst"]["sponsorship"], "OK_SPONSORS")
+                self.assertEqual(by["Analytics Engineer"]["sponsorship"], "LONG_TERM_RISK")
+                self.assertTrue(os.path.exists(by["Senior Data Analyst"]["jd_file"]))
+                buf2 = io.StringIO()
+                with contextlib.redirect_stdout(buf2):
+                    main(["--queue", qp, "scan", "--config", cfgp])
+                self.assertEqual(json.loads(buf2.getvalue().strip().splitlines()[-1])["new"], 0)  # idempotent
+        finally:
+            mod.scan = real
+
+
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "pipeline.sample.md")
 
 
