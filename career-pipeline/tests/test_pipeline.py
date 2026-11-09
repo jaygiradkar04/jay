@@ -160,6 +160,37 @@ class AtsScanner(unittest.TestCase):
             mod.scan = real
 
 
+class Discover(unittest.TestCase):
+    def test_slug_candidates(self):
+        from scanners.discover import slug_candidates
+        self.assertEqual(slug_candidates("Instacart, Inc."), ["instacart"])
+        self.assertIn("fidelityinvestments", slug_candidates("Fidelity Technology Group, LLC d/b/a Fidelity Investments"))
+        self.assertNotIn("the", slug_candidates("The Home Depot USA Inc"))
+        self.assertNotIn("capital", slug_candidates("Capital One Services, LLC"))  # too generic
+
+    def test_pick_direct_sponsors_excludes_staffing_and_stale(self):
+        from scanners.discover import pick_direct_sponsors
+        rows = [{"n": "Good Co", "ly": 2026, "filed": 100, "sh": 0.0},
+                {"n": "Body Shop", "ly": 2026, "filed": 900, "sh": 0.95},
+                {"n": "Old Co", "ly": 2022, "filed": 100, "sh": 0.0},
+                {"n": "Tiny Co", "ly": 2026, "filed": 3, "sh": 0.0}]
+        self.assertEqual([r["n"] for r in pick_direct_sponsors(rows)], ["Good Co"])
+
+    def test_discover_survives_errors_and_reports_matches(self):
+        from scanners.discover import discover
+        gh = {"jobs": [{"title": "Data Analyst", "absolute_url": "https://x/1", "location": {"name": "R"},
+                        "first_published": "2026-11-01", "content": ""}]}
+        def fake(url):
+            if "/boards/goodco/" in url:
+                return gh
+            raise OSError("timeout")
+        rows = [{"n": "Goodco, Inc.", "ly": 2026, "filed": 100, "perm": 5, "sh": 0.0},
+                {"n": "Ghost Corp", "ly": 2026, "filed": 90, "perm": 0, "sh": 0.0}]
+        res = discover(rows, ["Analyst"], [], fetcher=fake, workers=2)
+        self.assertEqual(len(res), 1)
+        self.assertEqual((res[0]["ats"], res[0]["slug"], res[0]["matches"]), ("greenhouse", "goodco", ["Data Analyst"]))
+
+
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "pipeline.sample.md")
 
 
