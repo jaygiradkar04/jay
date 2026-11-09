@@ -225,6 +225,31 @@ class Priority(unittest.TestCase):
             mod.scan = real
 
 
+class Location(unittest.TestCase):
+    def test_is_us(self):
+        from scanners.ats_scan import is_us
+        for loc in ["Remote US", "New York, NY", "Chicago, US Remote, SF, NYC, Seattle", "United States", "Austin, TX", "Remote"]:
+            self.assertTrue(is_us(loc), loc)
+        for loc in ["IN-Pune", "Dublin, Ireland", "Bengaluru, India", "Singapore", "Gurugram", "London, UK", "Toronto, Canada"]:
+            self.assertFalse(is_us(loc), loc)
+        self.assertIsNone(is_us(""))
+        self.assertIsNone(is_us("Hybrid"))          # unknown is kept, not dropped
+        self.assertTrue(is_us("Dublin; Remote US"))  # multi-location with a US option
+
+    def test_scan_drops_non_us_by_default(self):
+        from datetime import datetime, timezone
+        from scanners.ats_scan import scan
+        gh = {"jobs": [{"title": "Data Analyst", "absolute_url": "https://x/1", "location": {"name": "Dublin, Ireland"},
+                        "first_published": "2026-11-05", "content": ""},
+                       {"title": "Data Analyst", "absolute_url": "https://x/2", "location": {"name": "Remote US"},
+                        "first_published": "2026-11-05", "content": ""}]}
+        cfg = {"title_positive": ["Analyst"], "companies": [{"name": "A", "ats": "greenhouse", "slug": "a"}]}
+        jobs, _ = scan(cfg, lambda u: gh, today=datetime(2026, 11, 9, tzinfo=timezone.utc))
+        self.assertEqual([j["url"] for j in jobs], ["https://x/2"])
+        jobs, _ = scan({**cfg, "us_only": False}, lambda u: gh, today=datetime(2026, 11, 9, tzinfo=timezone.utc))
+        self.assertEqual(len(jobs), 2)
+
+
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "pipeline.sample.md")
 
 

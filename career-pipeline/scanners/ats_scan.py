@@ -76,6 +76,25 @@ def normalize(ats: str, company: str, payload) -> list[dict]:
     return [o for o in out if o["url"]]
 
 
+_US = re.compile(r"\b(?:us|usa|u\.s\.a?\.?|united states)\b|,\s*(?:A[LKZR]|C[AOT]|D[EC]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|V[AT]|W[AIVY])\b"
+                 r"|\b(?:new york|san francisco|seattle|chicago|austin|boston|los angeles|denver|atlanta|remote)\b", re.I)
+_FOREIGN = re.compile(
+    r"\b(?:india|ireland|dublin|singapore|uk|united kingdom|london|canada|toronto|vancouver|germany|berlin|munich|"
+    r"pune|bengaluru|bangalore|gurgaon|gurugram|hyderabad|mumbai|chennai|noida|delhi|australia|sydney|melbourne|"
+    r"brazil|s[aã]o paulo|mexico|japan|tokyo|paris|france|netherlands|amsterdam|poland|warsaw|israel|tel aviv|"
+    r"china|beijing|shanghai|philippines|manila|spain|madrid|portugal|lisbon|emea|apac|latam|korea|seoul)\b|^in-", re.I)
+
+
+def is_us(location: str):
+    """True = US, False = clearly non-US, None = unknown (kept, flagged)."""
+    loc = (location or "").strip()
+    if not loc:
+        return None
+    if _US.search(loc):
+        return True            # a US marker anywhere wins (multi-location postings)
+    return False if _FOREIGN.search(loc) else None
+
+
 def title_ok(title: str, positive: list[str], negative: list[str]) -> bool:
     t = title.lower()
     if any(n.lower() in t for n in negative):
@@ -97,6 +116,8 @@ def scan(config: dict, fetcher=fetch_json, today: datetime | None = None) -> tup
             for j in normalize(c["ats"], c["name"], payload):
                 j["h1b_filed"], j["h1b_perm"] = c.get("filed"), c.get("perm")
                 if not title_ok(j["title"], pos, neg):
+                    continue
+                if config.get("us_only", True) and is_us(j["location"]) is False:
                     continue
                 if j["posted"] and j["posted"] < cutoff:
                     continue
