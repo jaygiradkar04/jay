@@ -69,7 +69,7 @@ def probe(name: str, fetcher=fetch_json) -> list[dict]:
     return hits
 
 
-def discover(rows, positive, negative, limit=400, workers=8, fetcher=fetch_json):
+def discover(rows, positive, negative, limit=400, workers=8, fetcher=fetch_json, offset=0):
     """Probe the top `limit` direct sponsors; report boards with matching titles."""
     def work(r):
         try:
@@ -82,6 +82,6 @@ def discover(rows, positive, negative, limit=400, workers=8, fetcher=fetch_json)
 
     results: list[dict] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        for found in ex.map(work, pick_direct_sponsors(rows)[:limit]):
+        for found in ex.map(work, pick_direct_sponsors(rows)[offset:offset + limit]):
             results.extend(found)
     return results
