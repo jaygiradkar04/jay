@@ -40,8 +40,9 @@ def bez(p0, c, p1, n=60):
 
 half = np.vstack([
     [(0, 7), (3.2, 14)],                      # V notch, ear tip
-    bez((6.5, 6.5), (30, -2), (75, 26)),      # deep concave top edge up to a high wing tip
-    bez((75, 26), (52, 6), (33, -20)),        # crescent trailing edge down to the flank point
+    bez((6.5, 6.5), (13, 4), (22, 6.2)),      # short blend out of the ear
+    [(75, 20)],                               # straight top edge to the wing tip
+    [(33, -20)],                              # straight trailing edge down to the flank point
     bez((33, -20), (15, -2), (0, -32)),       # inner scallop to the long tail point
 ])
 pts = np.vstack([half, (half * [-1, 1])[-2:0:-1]])
