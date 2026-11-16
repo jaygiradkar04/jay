@@ -27,8 +27,8 @@ p.add_argument("--magnet-d", type=float, default=6, help="magnet diameter, mm")
 p.add_argument("--magnet-h", type=float, default=2, help="magnet height, mm")
 p.add_argument("--clearance", type=float, default=0.2, help="added to pocket diameter and depth, mm")
 p.add_argument("--magnet-spacing", type=float, default=12, help="centre-to-centre distance, mm")
-p.add_argument("--cut-x", type=float, default=26, help="where the wall slices the right wing (at span 150), mm from centre")
-p.add_argument("--cut-angle", type=float, default=30, help="in-plane lean of the batarang against the wall, deg")
+p.add_argument("--cut-x", type=float, default=30, help="where the wall slices the right wing (at span 150), mm from centre")
+p.add_argument("--cut-angle", type=float, default=20, help="in-plane lean of the batarang against the wall, deg")
 p.add_argument("--cut-tilt", type=float, default=8, help="out-of-plane lean, deg")
 a = p.parse_args()
 T, E, B = a.thickness, a.edge, a.bevel
@@ -39,11 +39,11 @@ def bez(p0, c, p1, n=60):
     return (1 - t) ** 2 * np.array(p0) + 2 * t * (1 - t) * np.array(c) + t ** 2 * np.array(p1)
 
 half = np.vstack([
-    [(0, 7), (3.2, 14)],                      # V notch, ear tip
-    bez((6.5, 6.5), (13, 4), (22, 6.2)),      # short blend out of the ear
-    [(75, 20)],                               # straight top edge to the wing tip
-    [(33, -20)],                              # straight trailing edge down to the flank point
-    bez((33, -20), (15, -2), (0, -32)),       # inner scallop to the long tail point
+    [(0, 15), (2.5, 15.5), (4, 22.5)],        # U notch, narrow ear spike
+    bez((6.8, 12), (22, 10), (26, 20)),       # round scoop beside the head, up to the wing corner
+    [(75.5, 21.2)],                           # flat, straight top edge out to the wing tip
+    bez((75.5, 21.2), (57, 20), (54.4, -5.4)),  # tip hooks down and in to the flank point
+    bez((54.4, -5.4), (20, -7), (0, -26)),    # long shallow sweep to the tail point
 ])
 pts = np.vstack([half, (half * [-1, 1])[-2:0:-1]])
 k = a.span / 150
