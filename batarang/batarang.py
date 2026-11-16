@@ -1,79 +1,154 @@
-"""Parametric 3D-printable batarang with two magnet pockets.
+"""Parametric "stuck in the wall" magnetic batarang.
 
-Usage:  python3 batarang.py [--span 150] [--thickness 4] [--magnet-d 6] [--magnet-h 2]
-Outputs batarang.stl and preview.png next to this script.
-Requires: shapely trimesh manifold3d mapbox-earcut numpy matplotlib
+A bevelled batarang with one wing sliced off at an angle. Two magnets sit in
+the sliced face, so on a fridge or steel plate it looks like it was thrown
+into the surface.
+
+Usage:  python3 batarang.py [--span 150] [--thickness 10] [--magnet-d 6] [--magnet-h 2]
+Outputs batarang.stl (lying flat, ready to print) and preview.png.
+Requires: numpy scipy shapely trimesh manifold3d matplotlib
 """
 import argparse
 from pathlib import Path
 
+import numpy as np
+import shapely
 import trimesh
+from scipy.spatial import Delaunay
 from shapely import affinity
-from shapely.geometry import Point, Polygon
-from shapely.ops import unary_union
+from shapely.geometry import LineString, Polygon
 
 p = argparse.ArgumentParser()
-p.add_argument("--span", type=float, default=150, help="wingtip-to-wingtip width, mm")
-p.add_argument("--thickness", type=float, default=4, help="blade thickness, mm")
+p.add_argument("--span", type=float, default=150, help="full wingtip-to-wingtip width before the cut, mm")
+p.add_argument("--thickness", type=float, default=10, help="thickness at the centre, mm")
+p.add_argument("--edge", type=float, default=1.2, help="thickness left at the bevelled edge, mm")
+p.add_argument("--bevel", type=float, default=4.4, help="bevel width, mm")
 p.add_argument("--magnet-d", type=float, default=6, help="magnet diameter, mm")
 p.add_argument("--magnet-h", type=float, default=2, help="magnet height, mm")
 p.add_argument("--clearance", type=float, default=0.2, help="added to pocket diameter and depth, mm")
-p.add_argument("--magnet-spacing", type=float, default=40, help="centre-to-centre distance, mm (at span 150)")
+p.add_argument("--magnet-spacing", type=float, default=10, help="centre-to-centre distance, mm")
+p.add_argument("--cut-x", type=float, default=24, help="where the wall slices the right wing (at span 150), mm from centre")
+p.add_argument("--cut-angle", type=float, default=20, help="in-plane lean of the batarang against the wall, deg")
+p.add_argument("--cut-tilt", type=float, default=8, help="out-of-plane lean, deg")
 a = p.parse_args()
+T, E, B = a.thickness, a.edge, a.bevel
 
-# ---- 2D outline, drawn at 150 mm span then scaled ---------------------------
-def circle(x, y, r):
-    return Point(x, y).buffer(r, 128)
+# ---- 2D outline (drawn at 150 mm span, then scaled) -------------------------
+def bez(p0, c, p1, n=60):
+    t = np.linspace(0, 1, n)[:, None]
+    return (1 - t) ** 2 * np.array(p0) + 2 * t * (1 - t) * np.array(c) + t ** 2 * np.array(p1)
 
-body = affinity.scale(circle(0, 0, 1), 75, 28)           # wing ellipse
-cuts, ears = [], []
-for s in (1, -1):
-    cuts += [circle(s * 38, 40, 30),                      # concave top edge
-             circle(s * 20, -34, 20),                     # inner bottom scallop
-             circle(s * 55, -30, 17)]                     # outer bottom scallop
-    ears.append(Polygon([(s * 2.5, 18), (s * 14, 18), (s * 9.5, 37)]))
-outline = unary_union([body.difference(unary_union(cuts))] + ears)
-outline = outline.buffer(1.5, 32).buffer(-1.5, 32)       # fillet inside corners
-outline = outline.buffer(-0.8, 32).buffer(0.8, 32)       # blunt every tip (r = 0.8 mm)
-
+half = np.vstack([
+    [(0, 9), (3.5, 15.5)],                    # notch, ear tip
+    bez((7.5, 8), (35, 3), (75, 25)),         # top edge out to the wing tip
+    bez((75, 25), (47, 3), (30, -22)),        # swept trailing edge
+    bez((30, -22), (15, -4), (0, -32)),       # inner scallop to the tail point
+])
+pts = np.vstack([half, (half * [-1, 1])[-2:0:-1]])
 k = a.span / 150
-outline = affinity.scale(outline, k, k, origin=(0, 0))
+outline = affinity.scale(Polygon(pts), k, k, origin=(0, 0))
+outline = outline.buffer(-0.5, 32).buffer(0.5, 32)       # blunt the tips
 
-# ---- 3D ---------------------------------------------------------------------
-solid = trimesh.creation.extrude_polygon(outline, a.thickness)
+# ---- bevelled solid: height field over the outline --------------------------
+def ring_points(geom, step=0.4):
+    out = []
+    for g in getattr(geom, "geoms", [geom]):
+        for r in [g.exterior, *g.interiors]:
+            n = max(8, int(r.length / step))
+            out += [r.interpolate(i / n, normalized=True).coords[0] for i in range(n)]
+    return out
 
-pocket_d = a.magnet_d + a.clearance
-pocket_h = a.magnet_h + a.clearance
-floor = a.thickness - pocket_h
-assert floor >= 0.8, f"only {floor:.2f} mm left above the magnet; raise --thickness"
+levels = 16
+xy = []
+for i in range(levels + 1):
+    inset = outline.buffer(-B * i / levels, 16)
+    if not inset.is_empty:
+        xy += ring_points(inset)
+minx, miny, maxx, maxy = outline.bounds
+gx, gy = np.meshgrid(np.arange(minx, maxx, 1.5), np.arange(miny, maxy, 1.5))
+grid = np.c_[gx.ravel(), gy.ravel()]
+core = outline.buffer(-B - 0.5)
+xy = np.vstack([xy, grid[shapely.contains_xy(core, grid[:, 0], grid[:, 1])]])
 
-mx = a.magnet_spacing / 2 * k
+tri = Delaunay(xy).simplices
+cen = xy[tri].mean(axis=1)
+tri = tri[shapely.contains_xy(outline.buffer(1e-6), cen[:, 0], cen[:, 1])]
+
+d = shapely.distance(outline.exterior, shapely.points(xy))
+z = E / 2 + np.minimum(d, B) / B * (T - E) / 2
+n = len(xy)
+verts = np.vstack([np.c_[xy, z], np.c_[xy, -z]])
+edges = np.sort(np.vstack([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]]), axis=1)
+directed = np.vstack([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
+_, inv, cnt = np.unique(edges, axis=0, return_inverse=True, return_counts=True)
+rim = directed[cnt[inv.ravel()] == 1]
+i, j = rim[:, 0], rim[:, 1]
+faces = np.vstack([tri, tri[:, ::-1] + n, np.c_[i, i + n, j + n], np.c_[i, j + n, j]])
+solid = trimesh.Trimesh(verts, faces, process=True)
+assert solid.is_watertight, "bevelled blank is not watertight"
+if solid.volume < 0:
+    solid.invert()
+
+# ---- slice one wing off where it "enters the wall" --------------------------
+phi, tilt = np.radians(a.cut_angle), np.radians(a.cut_tilt)
+normal = np.array([np.cos(phi) * np.cos(tilt), np.sin(phi) * np.cos(tilt), np.sin(tilt)])
+along = np.array([-np.sin(phi), np.cos(phi), 0.0])       # direction along the cut face, in-plane
+origin = np.array([a.cut_x * k, 0, 0])
+
+box = trimesh.creation.box([400, 400, 400])
+to_wall = trimesh.geometry.align_vectors([1, 0, 0], normal)
+box.apply_translation([-200, 0, 0]); box.apply_transform(to_wall); box.apply_translation(origin)
+blank = solid.intersection(box)
+
+# centre the magnets on the full-thickness part of the cut face
+line = LineString([origin[:2] - along[:2] * 200, origin[:2] + along[:2] * 200])
+flat = line.intersection(outline.buffer(-B))
+flat = max(getattr(flat, "geoms", [flat]), key=lambda g: g.length)
+mid = np.array([*flat.centroid.coords[0], 0.0])
+pocket_d, pocket_h = a.magnet_d + a.clearance, a.magnet_h + a.clearance
+need = a.magnet_spacing + pocket_d + 2
+assert flat.length >= need, f"cut face flat is {flat.length:.1f} mm, need {need:.1f}; move --cut-x inward"
+
+part = blank
 for s in (1, -1):
-    c = Point(s * mx, 1 * k)
-    assert outline.contains(c.buffer(pocket_d / 2 + 1.5)), "magnet pocket too close to the edge"
-    cyl = trimesh.creation.cylinder(radius=pocket_d / 2, height=pocket_h + 1, sections=96)
-    cyl.apply_translation([c.x, c.y, pocket_h - (pocket_h + 1) / 2])  # opens on z=0 face
-    solid = solid.difference(cyl)
+    c = mid + s * along * a.magnet_spacing / 2
+    c -= normal * (c - origin).dot(normal)                # drop onto the cut plane
+    for r, h, check in ((pocket_d / 2 + 0.8, pocket_h + 0.6, True), (pocket_d / 2, pocket_h, False)):
+        cyl = trimesh.creation.cylinder(radius=r, height=2 * h, sections=96)
+        cyl.apply_transform(trimesh.geometry.align_vectors([0, 0, 1], normal))
+        cyl.apply_translation(c)
+        if check:   # pocket plus 0.8 mm wall must be buried in plastic
+            buried = cyl.intersection(box)
+            lost = buried.volume - buried.intersection(blank).volume
+            assert lost < 0.5, f"magnet pocket breaks through the surface ({lost:.1f} mm3); raise --thickness"
+        else:
+            part = part.difference(cyl)
 
-assert solid.is_watertight
+assert part.is_watertight
+part.apply_translation([0, 0, T / 2])                    # lie flat on the bed
 out = Path(__file__).parent
-solid.export(out / "batarang.stl")
-x, y, z = solid.extents
-print(f"batarang.stl: {x:.1f} x {y:.1f} x {z:.1f} mm, volume {solid.volume/1000:.1f} cm3")
-print(f"pockets: 2 x dia {pocket_d:.2f} x {pocket_h:.2f} deep, {2*mx:.1f} mm apart, {floor:.2f} mm cover")
+part.export(out / "batarang.stl")
+x, y, zz = part.extents
+print(f"batarang.stl: {x:.1f} x {y:.1f} x {zz:.1f} mm, volume {part.volume/1000:.1f} cm3")
+print(f"cut face flat {flat.length:.1f} mm long; 2 pockets dia {pocket_d:.2f} x {pocket_h:.2f} deep, {a.magnet_spacing:g} mm apart")
 
 # ---- preview ----------------------------------------------------------------
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-fig, ax = plt.subplots(figsize=(10, 4.5), dpi=150)
-ax.fill(*outline.exterior.xy, color="#1b1b1f")
-for s in (1, -1):
-    ax.add_patch(plt.Circle((s * mx, k), pocket_d / 2, color="#c9ced6"))
-ax.annotate("", (-a.span / 2, -34 * k), (a.span / 2, -34 * k), arrowprops=dict(arrowstyle="<->"))
-ax.text(0, -38 * k, f"{x:.0f} mm", ha="center", va="top")
-ax.text(0, -9 * k, f"2 x magnet pocket  dia {pocket_d:g} x {pocket_h:g} mm (back face)",
-        ha="center", color="w", fontsize=8)
-ax.set_aspect("equal"); ax.axis("off")
-fig.savefig(out / "preview.png", bbox_inches="tight")
+def draw(ax, mesh, elev, azim, title):
+    light = np.array([0.3, -0.5, 0.8]); light /= np.linalg.norm(light)
+    shade = 0.25 + 0.6 * np.clip(mesh.face_normals @ light, 0, 1)
+    ax.add_collection3d(Poly3DCollection(mesh.triangles, facecolors=np.c_[shade * .55, shade * .55, shade * .6], edgecolor="none"))
+    lo, hi = mesh.bounds; c = (lo + hi) / 2; r = (hi - lo).max() / 2
+    ax.set_xlim(c[0] - r, c[0] + r); ax.set_ylim(c[1] - r, c[1] + r); ax.set_zlim(c[2] - r, c[2] + r)
+    ax.set_box_aspect((1, 1, 1), zoom=1.45); ax.view_init(elev, azim); ax.set_axis_off(); ax.set_title(title, fontsize=10)
+
+fig = plt.figure(figsize=(13, 5), dpi=150)
+draw(fig.add_subplot(131, projection="3d"), part, 89, -90, "as printed (top)")
+draw(fig.add_subplot(132, projection="3d"), part, 30, -60, "bevels")
+draw(fig.add_subplot(133, projection="3d"), part, 20, 10, "cut face with magnet pockets")
+fig.subplots_adjust(0, 0, 1, 0.95, 0, 0)
+fig.savefig(out / "preview.png")
