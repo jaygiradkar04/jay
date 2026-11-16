@@ -4,7 +4,7 @@ A bevelled batarang with one wing sliced off at an angle. Two magnets sit in
 the sliced face, so on a fridge or steel plate it looks like it was thrown
 into the surface.
 
-Usage:  python3 batarang.py [--span 127.5] [--thickness 10] [--magnet-d 6] [--magnet-h 2]
+Usage:  python3 batarang.py [--span 212] [--thickness 12] [--magnet-d 6] [--magnet-h 2]
 Outputs batarang.stl (lying flat, ready to print) and preview.png.
 Requires: numpy scipy shapely trimesh manifold3d matplotlib
 """
@@ -19,14 +19,14 @@ from shapely import affinity
 from shapely.geometry import LineString, Polygon
 
 p = argparse.ArgumentParser()
-p.add_argument("--span", type=float, default=127.5, help="full wingtip-to-wingtip width before the cut, mm")
-p.add_argument("--thickness", type=float, default=10, help="thickness at the centre, mm")
+p.add_argument("--span", type=float, default=212, help="full wingtip-to-wingtip width before the cut, mm")
+p.add_argument("--thickness", type=float, default=12, help="thickness at the centre, mm")
 p.add_argument("--edge", type=float, default=1.2, help="thickness left at the bevelled edge, mm")
-p.add_argument("--bevel", type=float, default=4.4, help="bevel width, mm")
+p.add_argument("--bevel", type=float, default=6, help="bevel width, mm")
 p.add_argument("--magnet-d", type=float, default=6, help="magnet diameter, mm")
 p.add_argument("--magnet-h", type=float, default=2, help="magnet height, mm")
 p.add_argument("--clearance", type=float, default=0.2, help="added to pocket diameter and depth, mm")
-p.add_argument("--magnet-spacing", type=float, default=8.5, help="centre-to-centre distance, mm")
+p.add_argument("--magnet-spacing", type=float, default=12, help="centre-to-centre distance, mm")
 p.add_argument("--cut-x", type=float, default=26, help="where the wall slices the right wing (at span 150), mm from centre")
 p.add_argument("--cut-angle", type=float, default=30, help="in-plane lean of the batarang against the wall, deg")
 p.add_argument("--cut-tilt", type=float, default=8, help="out-of-plane lean, deg")
